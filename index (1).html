@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Uber — Ganancias y ahorros</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#181b22; --line:#262a33; --txt:#e8eaee; --mut:#8b92a0;
+    --acc:#22c55e; --warn:#f59e0b; --bad:#ef4444; --blue:#3b82f6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:20px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  header h1{margin:0;font-size:20px}
+  header .acts{display:flex;gap:8px;flex-wrap:wrap}
+  main{max-width:1200px;margin:0 auto;padding:20px;display:grid;gap:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:15px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:800px){.grid2{grid-template-columns:1fr}}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kpi .l{font-size:12px;color:var(--mut)}
+  .kpi .v{font-size:22px;font-weight:700;margin-top:4px}
+  .kpi .s{font-size:12px;color:var(--mut);margin-top:2px}
+  form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+  label{font-size:12px;color:var(--mut);display:flex;flex-direction:column;gap:4px}
+  input,select{background:#0f1115;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 10px;font-size:14px;width:100%}
+  input:focus{outline:2px solid var(--blue);border-color:transparent}
+  button{background:var(--acc);color:#06210f;border:0;border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;font-size:14px}
+  button.sec{background:#262a33;color:var(--txt)}
+  button.del{background:transparent;color:var(--bad);padding:4px 8px}
+  button.edit{background:transparent;color:var(--blue);padding:4px 8px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--mut);font-weight:600;font-size:12px}
+  .tw{overflow-x:auto}
+  .pos{color:var(--acc)} .neg{color:var(--bad)}
+  .hint{font-size:12px;color:var(--mut);margin-top:8px}
+  .filter{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .filter input{width:auto}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚗 Control Uber</h1>
+  <div class="acts" style="align-items:center">
+    <span id="cloudStatus" style="font-size:12px;color:var(--mut)">💾 Solo este dispositivo</span>
+    <button id="btnLogin" style="display:none">Entrar con Google</button>
+    <button class="sec" onclick="exportJSON()">Respaldo (JSON)</button>
+    <button class="sec" onclick="document.getElementById('imp').click()">Restaurar</button>
+    <button class="sec" onclick="exportCSV()">Exportar a Excel (CSV)</button>
+    <button class="sec" onclick="document.getElementById('impcsv').click()">Importar CSV</button>
+    <input type="file" id="imp" accept=".json" hidden onchange="importJSON(this)">
+    <input type="file" id="impcsv" accept=".csv" hidden onchange="importCSV(this)">
+  </div>
+</header>
+
+<main>
+  <!-- KPIs -->
+  <section class="kpis" id="kpis"></section>
+
+  <div class="grid2">
+    <!-- Registro diario -->
+    <section class="card">
+      <h2>Registrar día</h2>
+      <form id="fDia">
+        <input type="hidden" id="editId">
+        <label>Fecha<input type="date" id="fecha" required></label>
+        <label>Km recorridos<input type="number" id="km" step="0.1" min="0" required></label>
+        <label>Gasolina ($) <span id="gasAuto" style="color:var(--acc)">· automática</span><input type="number" id="gas" step="1" min="0" required></label>
+        <label>Ganancias ($)<input type="number" id="gan" step="1" min="0" required></label>
+        <button type="submit" id="btnGuardar">Guardar</button>
+      </form>
+      <p class="hint">La gasolina se calcula sola: km ÷ km por galón × precio del galón. Si ese día fue distinto, escribe el valor real encima.</p>
+    </section>
+
+    <!-- Configuración -->
+    <section class="card">
+      <h2>Configuración de ahorros</h2>
+      <form id="fCfg">
+        <label>Precio galón gasolina ($)<input type="number" id="cGal" step="1" min="0"></label>
+        <label>Rendimiento (km por galón)<input type="number" id="cRend" step="0.1" min="0"></label>
+        <label>Mantenimiento ($ por km)<input type="number" id="cMant" step="1" min="0"></label>
+        <label>Impuesto vehicular anual ($)<input type="number" id="cImp" step="1" min="0"></label>
+        <label>SOAT anual ($)<input type="number" id="cSoat" step="1" min="0"></label>
+        <label>Seguro anual ($)<input type="number" id="cSeg" step="1" min="0"></label>
+        <button type="submit">Guardar config</button>
+      </form>
+      <p class="hint">Ahorro semanal = km × $/km de mantenimiento + (impuesto + SOAT + seguro) ÷ 52.<br>
+      Si cambias el precio del galón, los días ya guardados conservan el valor con el que se registraron.</p>
+    </section>
+  </div>
+
+  <!-- Gráfico -->
+  <section class="card">
+    <h2>Semanas: ganancia neta vs ahorro</h2>
+    <canvas id="chart" height="90"></canvas>
+  </section>
+
+  <!-- Resumen semanal -->
+  <section class="card">
+    <h2>Resumen semanal</h2>
+    <div class="tw"><table id="tSem"></table></div>
+  </section>
+
+  <!-- Registros diarios -->
+  <section class="card">
+    <h2>Registros diarios</h2>
+    <div class="filter">
+      <label style="flex-direction:row;align-items:center;gap:6px">Mes
+        <input type="month" id="fMes"></label>
+      <button class="sec" onclick="document.getElementById('fMes').value='';render()">Ver todo</button>
+    </div>
+    <div class="tw"><table id="tDia"></table></div>
+  </section>
+</main>
+
+<script>
+const KEY='uberTracker_v1';
+let db = load();
+let chart;
+
+function load(){
+  const base={mant:0, imp:0, soat:0, seg:0, gal:0, rend:0};
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d){ d.cfg={...base,...d.cfg}; return d; } }catch(e){}
+  return { cfg:base, dias:[] };
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){}
+  if(window.cloud) window.cloud.push(db);
+}
+// Puente para la sincronización en la nube
+window.app = {
+  get: ()=>db,
+  set: d=>{ const base={mant:0,imp:0,soat:0,seg:0,gal:0,rend:0}; db={cfg:{...base,...(d.cfg||{})}, dias:d.dias||[]};
+            try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} render(); }
+};
+
+const $=id=>document.getElementById(id);
+// Fecha local (evita que de noche salga la fecha de mañana por UTC)
+function hoy(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+const fmt=n=>'$'+Math.round(n||0).toLocaleString('es-CO');
+const fkm=n=>(Math.round((n||0)*10)/10).toLocaleString('es-CO')+' km';
+
+// Semana ISO (lunes a domingo)
+function weekStart(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day);
+  return d.toISOString().slice(0,10);
+}
+function fmtDate(s){ const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'}); }
+
+function calcDia(x){
+  const neto = x.gan - x.gas;
+  const mant = x.km * db.cfg.mant;
+  return { neto, mant, porKm: x.km? neto/x.km : 0 };
+}
+
+function semanas(){
+  const map={};
+  db.dias.forEach(x=>{
+    const w=weekStart(x.fecha);
+    map[w] ??= {w, dias:0, km:0, gas:0, gan:0};
+    const s=map[w]; s.dias++; s.km+=x.km; s.gas+=x.gas; s.gan+=x.gan;
+  });
+  return Object.values(map).sort((a,b)=>a.w<b.w?1:-1).map(s=>{
+    s.neto=s.gan-s.gas;
+    s.galones = db.cfg.rend ? s.km/db.cfg.rend : 0;
+    s.aMant=s.km*db.cfg.mant;
+    s.aImp=db.cfg.imp/52;
+    s.aSoat=db.cfg.soat/52;
+    s.aSeg=db.cfg.seg/52;
+    s.aTot=s.aMant+s.aImp+s.aSoat+s.aSeg;
+    s.libre=s.neto-s.aTot;
+    return s;
+  });
+}
+
+function render(){
+  // Config
+  $('cMant').value=db.cfg.mant||''; $('cImp').value=db.cfg.imp||''; $('cSoat').value=db.cfg.soat||'';
+  $('cSeg').value=db.cfg.seg||''; $('cGal').value=db.cfg.gal||''; $('cRend').value=db.cfg.rend||'';
+
+  const sem=semanas();
+  const mes=$('fMes').value;
+  const dias=[...db.dias].filter(x=>!mes||x.fecha.startsWith(mes)).sort((a,b)=>a.fecha<b.fecha?1:-1);
+
+  // KPIs (mes actual / filtro)
+  const ref = mes || hoy().slice(0,7);
+  const dm = db.dias.filter(x=>x.fecha.startsWith(ref));
+  const T = dm.reduce((a,x)=>({km:a.km+x.km,gas:a.gas+x.gas,gan:a.gan+x.gan}),{km:0,gas:0,gan:0});
+  const neto=T.gan-T.gas;
+  const semMes = sem.filter(s=>s.w.slice(0,7)===ref || dm.some(x=>weekStart(x.fecha)===s.w));
+  const ahorroMes = T.km*db.cfg.mant + (db.cfg.imp+db.cfg.soat+db.cfg.seg)/52*semMes.length;
+  const totAhorro = sem.reduce((a,s)=>a+s.aTot,0);
+  const lbl = new Date(ref+'-01T00:00:00').toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+  // Tanqueo: semana actual (o la última trabajada)
+  const hoyW = weekStart(hoy());
+  const sT = sem.find(s=>s.w===hoyW) || sem[0];
+  const finW = sT ? (()=>{const d=new Date(sT.w+'T00:00:00'); d.setDate(d.getDate()+6); return d.toISOString().slice(0,10);})() : '';
+  const tanqueo = sT ? `
+    <div class="kpi" style="border-color:var(--blue);grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div><div class="l">⛽ Tanquear ${sT.w===hoyW?'esta semana':'(última semana trabajada)'} · ${fmtDate(sT.w)} – ${fmtDate(finW)}</div>
+        <div class="v" style="color:var(--blue)">${fmt(sT.gas)}${sT.galones?` <span style="font-size:15px;color:var(--mut)">≈ ${sT.galones.toLocaleString('es-CO',{maximumFractionDigits:1})} galones</span>`:''}</div>
+        <div class="s">${fkm(sT.km)} en ${sT.dias} día${sT.dias>1?'s':''}${sT.w===hoyW?' · se va sumando con cada día que registres':''}</div></div>
+    </div>` : '';
+  $('kpis').innerHTML = tanqueo + `
+    <div class="kpi"><div class="l">Ganancias (${lbl})</div><div class="v">${fmt(T.gan)}</div><div class="s">${dm.length} días trabajados</div></div>
+    <div class="kpi"><div class="l">Gasolina</div><div class="v neg">${fmt(T.gas)}</div><div class="s">${T.km?fmt(T.gas/T.km)+' por km':'—'}</div></div>
+    <div class="kpi"><div class="l">Neto (ganancia − gasolina)</div><div class="v pos">${fmt(neto)}</div><div class="s">${T.km?fmt(neto/T.km)+' por km':'—'}</div></div>
+    <div class="kpi"><div class="l">Km recorridos</div><div class="v">${fkm(T.km)}</div><div class="s">${dm.length?fkm(T.km/dm.length)+' / día':'—'}</div></div>
+    <div class="kpi"><div class="l">Ahorro del mes</div><div class="v" style="color:var(--warn)">${fmt(ahorroMes)}</div><div class="s">mant. + impuesto + SOAT + seguro</div></div>
+    <div class="kpi"><div class="l">Libre del mes</div><div class="v ${neto-ahorroMes>=0?'pos':'neg'}">${fmt(neto-ahorroMes)}</div><div class="s">Ahorro acumulado total: ${fmt(totAhorro)}</div></div>`;
+
+  // Tabla semanal
+  $('tSem').innerHTML = `<tr><th>Semana (lun)</th><th>Días</th><th>Km</th><th>Ganancias</th><th>Tanquear ($)</th><th>Galones</th><th>Neto</th>
+    <th>Ahorro mant.</th><th>Ahorro imp.</th><th>Ahorro SOAT</th><th>Ahorro seguro</th><th>Total ahorro</th><th>Libre</th></tr>` +
+    (sem.length? sem.map(s=>`<tr><td>${fmtDate(s.w)}</td><td>${s.dias}</td><td>${fkm(s.km)}</td><td>${fmt(s.gan)}</td>
+      <td style="color:var(--blue);font-weight:600">${fmt(s.gas)}</td><td>${s.galones?s.galones.toLocaleString('es-CO',{maximumFractionDigits:1}):'—'}</td><td>${fmt(s.neto)}</td><td>${fmt(s.aMant)}</td><td>${fmt(s.aImp)}</td><td>${fmt(s.aSoat)}</td><td>${fmt(s.aSeg)}</td>
+      <td style="color:var(--warn);font-weight:600">${fmt(s.aTot)}</td><td class="${s.libre>=0?'pos':'neg'}" style="font-weight:600">${fmt(s.libre)}</td></tr>`).join('')
+      : `<tr><td colspan="13" style="text-align:center;color:var(--mut)">Aún no hay registros</td></tr>`);
+
+  // Tabla diaria
+  $('tDia').innerHTML = `<tr><th>Fecha</th><th>Km</th><th>Gasolina</th><th>Ganancias</th><th>Neto</th><th>Neto / km</th><th>Ahorro mant.</th><th></th></tr>` +
+    (dias.length? dias.map(x=>{const c=calcDia(x);return `<tr><td>${new Date(x.fecha+'T00:00:00').toLocaleDateString('es-CO',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})}</td>
+      <td>${fkm(x.km)}</td><td>${fmt(x.gas)}</td><td>${fmt(x.gan)}</td><td class="${c.neto>=0?'pos':'neg'}">${fmt(c.neto)}</td>
+      <td>${fmt(c.porKm)}</td><td>${fmt(c.mant)}</td>
+      <td><button class="edit" onclick="editar('${x.id}')">Editar</button><button class="del" onclick="borrar('${x.id}')">✕</button></td></tr>`}).join('')
+      : `<tr><td colspan="8" style="text-align:center;color:var(--mut)">Sin registros</td></tr>`);
+
+  // Gráfico (últimas 12 semanas)
+  const s12=[...sem].slice(0,12).reverse();
+  const data={labels:s12.map(s=>fmtDate(s.w)),datasets:[
+    {label:'Neto',data:s12.map(s=>Math.round(s.neto)),backgroundColor:'#22c55e'},
+    {label:'Ahorro',data:s12.map(s=>Math.round(s.aTot)),backgroundColor:'#f59e0b'},
+    {label:'Gasolina',data:s12.map(s=>Math.round(s.gas)),backgroundColor:'#ef4444'}]};
+  if(typeof Chart!=='undefined'){
+    if(chart){chart.data=data;chart.update();}
+    else chart=new Chart($('chart'),{type:'bar',data,options:{plugins:{legend:{labels:{color:'#e8eaee'}}},
+      scales:{x:{ticks:{color:'#8b92a0'},grid:{color:'#262a33'}},y:{ticks:{color:'#8b92a0',callback:v=>'$'+v.toLocaleString('es-CO')},grid:{color:'#262a33'}}}}});
+  }
+}
+
+$('fDia').onsubmit=e=>{
+  e.preventDefault();
+  const rec={id:$('editId').value||crypto.randomUUID(), fecha:$('fecha').value, km:+$('km').value, gas:+$('gas').value, gan:+$('gan').value};
+  const i=db.dias.findIndex(x=>x.id===rec.id);
+  if(i>=0) db.dias[i]=rec;
+  else {
+    if(db.dias.some(x=>x.fecha===rec.fecha) && !confirmar('Ya hay un registro para esa fecha. ¿Agregar otro?')) return;
+    db.dias.push(rec);
+  }
+  save(); limpiar(); render();
+};
+function confirmar(msg){ try{ return window.confirm(msg); }catch(e){ return true; } }
+$('fCfg').onsubmit=e=>{
+  e.preventDefault();
+  db.cfg={mant:+$('cMant').value||0, imp:+$('cImp').value||0, soat:+$('cSoat').value||0,
+          seg:+$('cSeg').value||0, gal:+$('cGal').value||0, rend:+$('cRend').value||0};
+  save(); render(); if(gasAuto) autoGas();
+};
+
+// Gasolina automática: km ÷ rendimiento × precio galón (se puede sobrescribir)
+let gasAuto=true;
+function autoGas(){
+  const km=+$('km').value, {gal,rend}=db.cfg;
+  if(gasAuto && km && gal && rend) $('gas').value=Math.round(km/rend*gal);
+  $('gasAuto').textContent = gasAuto ? (gal&&rend?'· automática':'· configura precio y rendimiento') : '· manual';
+  $('gasAuto').style.color = gasAuto ? 'var(--acc)' : 'var(--warn)';
+}
+$('km').addEventListener('input',autoGas);
+$('gas').addEventListener('input',()=>{ gasAuto=$('gas').value===''; autoGas(); });
+function editar(id){
+  const x=db.dias.find(d=>d.id===id); if(!x) return;
+  $('editId').value=x.id; $('fecha').value=x.fecha; $('km').value=x.km; $('gas').value=x.gas; $('gan').value=x.gan;
+  $('btnGuardar').textContent='Actualizar'; gasAuto=false; autoGas(); window.scrollTo({top:0,behavior:'smooth'});
+}
+function borrar(id){ if(!confirmar('¿Borrar este registro?')) return; db.dias=db.dias.filter(x=>x.id!==id); save(); render(); }
+function limpiar(){ $('fDia').reset(); $('editId').value=''; $('btnGuardar').textContent='Guardar'; $('fecha').value=hoy(); gasAuto=true; autoGas(); }
+
+// Respaldo
+function download(name, text, type){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click();
+}
+function exportJSON(){ download('uber-respaldo-'+hoy()+'.json', JSON.stringify(db,null,2),'application/json'); }
+function importJSON(inp){
+  const f=inp.files[0]; if(!f) return;
+  f.text().then(t=>{ const d=JSON.parse(t); if(!d.dias) throw 0; db=d; save(); render(); alert('Datos restaurados'); })
+   .catch(()=>alert('Archivo no válido')); inp.value='';
+}
+function exportCSV(){
+  const rows=[['fecha','km','gasolina','ganancias','neto','ahorro_mantenimiento']];
+  [...db.dias].sort((a,b)=>a.fecha<b.fecha?-1:1).forEach(x=>{const c=calcDia(x);rows.push([x.fecha,x.km,x.gas,x.gan,c.neto,Math.round(c.mant)]);});
+  download('uber-registros.csv','﻿'+rows.map(r=>r.join(';')).join('\n'),'text/csv');
+}
+// Importar CSV con columnas: fecha;km;gasolina;ganancias  (fecha AAAA-MM-DD o DD/MM/AAAA)
+function importCSV(inp){
+  const f=inp.files[0]; if(!f) return;
+  f.text().then(t=>{
+    const lines=t.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim());
+    const sep=lines[0].includes(';')?';':',';
+    let n=0;
+    lines.slice(1).forEach(l=>{
+      const [fe,km,gas,gan]=l.split(sep).map(s=>s.trim());
+      let fecha=fe;
+      const m=fe.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if(m) fecha=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+      const num=s=>+String(s||'0').replace(/[$\s.]/g,'').replace(',','.');
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+      db.dias.push({id:crypto.randomUUID(),fecha,km:num(km),gas:num(gas),gan:num(gan)}); n++;
+    });
+    save(); render(); alert(n+' registros importados');
+  }); inp.value='';
+}
+
+$('fMes').onchange=render;
+limpiar(); render();
+</script>
+
+<!-- ================= SINCRONIZACIÓN EN LA NUBE (Firebase) ================= -->
+<script type="module">
+// 👉 Pega aquí la configuración de tu proyecto Firebase (ver README).
+//    Si lo dejas vacío, la página funciona solo en este dispositivo.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBTz_nTz7vsdySWAXcFLi-UFRv9Ogwo8pg",
+  authDomain: "control-uber-6f3ed.firebaseapp.com",
+  projectId: "control-uber-6f3ed",
+  storageBucket: "control-uber-6f3ed.firebasestorage.app",
+  messagingSenderId: "551213510418",
+  appId: "1:551213510418:web:ae6b3aeaf0a10025b88dcb"
+};
+
+const $ = id => document.getElementById(id);
+const status = (t, c='var(--mut)') => { $('cloudStatus').textContent = t; $('cloudStatus').style.color = c; };
+
+if (FIREBASE_CONFIG.apiKey) {
+  const V = '10.12.2', B = `https://www.gstatic.com/firebasejs/${V}/`;
+  const { initializeApp } = await import(B + 'firebase-app.js');
+  const { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } = await import(B + 'firebase-auth.js');
+  const { getFirestore, doc, setDoc, onSnapshot } = await import(B + 'firebase-firestore.js');
+
+  const fb = initializeApp(FIREBASE_CONFIG);
+  const auth = getAuth(fb), fs = getFirestore(fb);
+  const btn = $('btnLogin');
+  btn.style.display = '';
+  let unsub = null, ref = null, timer = null;
+
+  btn.onclick = async () => {
+    if (auth.currentUser) { if (confirm('¿Cerrar sesión?')) signOut(auth); return; }
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+    catch (e) { alert('No se pudo iniciar sesión: ' + e.message); }
+  };
+
+  onAuthStateChanged(auth, user => {
+    if (unsub) { unsub(); unsub = null; }
+    window.cloud = null;
+    if (!user) { btn.textContent = 'Entrar con Google'; status('💾 Solo este dispositivo'); return; }
+
+    btn.textContent = 'Salir'; btn.className = 'sec';
+    status('⏳ Sincronizando…');
+    ref = doc(fs, 'usuarios', user.uid);
+    let primera = true;
+
+    unsub = onSnapshot(ref, snap => {
+      const nube = snap.exists() ? snap.data() : null;
+      if (primera) {
+        primera = false;
+        // Primera conexión: une lo que hay en este dispositivo con lo de la nube (sin duplicar)
+        const local = window.app.get();
+        const dias = new Map();
+        (nube?.dias || []).forEach(d => dias.set(d.id, d));
+        local.dias.forEach(d => { if (!dias.has(d.id)) dias.set(d.id, d); });
+        const cfgNube = nube?.cfg && Object.values(nube.cfg).some(v => v);
+        const unido = { cfg: cfgNube ? nube.cfg : local.cfg, dias: [...dias.values()] };
+        window.app.set(unido);
+        if (!nube || unido.dias.length !== (nube.dias || []).length || !cfgNube) setDoc(ref, unido);
+      } else if (nube && !snap.metadata.hasPendingWrites) {
+        window.app.set(nube); // cambios hechos desde otro dispositivo
+      }
+      status('☁️ Sincronizado · ' + (user.displayName || user.email).split(' ')[0], 'var(--acc)');
+    }, e => status('⚠️ Error de sincronización', 'var(--bad)'));
+
+    window.cloud = {
+      push: data => {
+        status('⏳ Guardando…');
+        clearTimeout(timer);
+        timer = setTimeout(() => setDoc(ref, JSON.parse(JSON.stringify(data)))
+          .then(() => status('☁️ Sincronizado · ' + (user.displayName || user.email).split(' ')[0], 'var(--acc)'))
+          .catch(() => status('⚠️ No se pudo guardar en la nube', 'var(--bad)')), 400);
+      }
+    };
+  });
+}
+</script>
+</body>
+</html>
